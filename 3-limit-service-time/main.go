@@ -22,9 +22,12 @@ type User struct {
 	TimeUsed  int64 // in seconds
 }
 
+// steps of 50ms
+const step = 50
+
 // HandleRequest runs the processes requested by users. Returns false
 // if process had to be killed
-func HandleRequest(process func(), u *User) bool {
+/*func HandleRequest(process func(), u *User) bool {
 	if u.IsPremium {
 		process()
 		return true
@@ -45,6 +48,35 @@ func HandleRequest(process func(), u *User) bool {
 func execute(process func(), finished chan<- bool) {
 	process()
 	finished <- true
+}*/
+
+// HandleRequest runs the processes requested by users. Returns false
+// if process had to be killed
+func HandleRequest(process func(), u *User) bool {
+	if u.IsPremium {
+		process()
+		return true
+	}
+
+	tick := time.Tick(step * time.Millisecond)
+	finished := make(chan bool)
+
+	go func(ok chan<- bool) {
+		process()
+		ok <- true
+	}(finished)
+
+	for {
+		select {
+		case <-tick:
+			u.TimeUsed += step
+			if u.TimeUsed > 10000 {
+				return false
+			}
+		case <-finished:
+			return true
+		}
+	}
 }
 
 func main() {
