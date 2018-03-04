@@ -13,10 +13,26 @@
 
 package main
 
+import (
+	"os"
+	"os/signal"
+)
+
 func main() {
 	// Create a process
 	proc := MockProcess{}
 
+	go iNTHandler(&proc)
+
 	// Run the process (blocking)
 	proc.Run()
+}
+
+func iNTHandler(proc *MockProcess) {
+	sign := make(chan os.Signal)
+
+	signal.Notify(sign, os.Interrupt)
+	// PAUSE AND WAIT
+	<-sign
+	proc.Stop()
 }
