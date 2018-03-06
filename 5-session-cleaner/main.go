@@ -29,9 +29,7 @@ const cleanerStep = 6 * time.Second
 // SessionManager keeps track of all sessions from creation, updating
 // to destroying.
 type SessionManager struct {
-	sync.Mutex
-
-	sessions map[string]Session
+	sessions sync.Map
 }
 
 // Session stores the session's data
@@ -42,11 +40,7 @@ type Session struct {
 
 // NewSessionManager creates a new sessionManager
 func NewSessionManager() *SessionManager {
-	m := &SessionManager{
-		sessions: make(map[string]Session),
-	}
-
-	return m
+	return &SessionManager{}
 }
 
 // CreateSession creates a new session and returns the sessionID
@@ -56,9 +50,9 @@ func (m *SessionManager) CreateSession() (string, error) {
 		return "", err
 	}
 
-	m.sessions[sessionID] = Session{
+	m.sessions.Store(sessionID, Session{
 		Data: make(map[string]interface{}),
-	}
+	})
 
 	return sessionID, nil
 }
@@ -70,25 +64,26 @@ var ErrSessionNotFound = errors.New("SessionID does not exists")
 // GetSessionData returns data related to session if sessionID is
 // found, errors otherwise
 func (m *SessionManager) GetSessionData(sessionID string) (map[string]interface{}, error) {
-	session, ok := m.sessions[sessionID]
+	session, ok := m.sessions.Load(sessionID)
+
 	if !ok {
 		return nil, ErrSessionNotFound
 	}
-	return session.Data, nil
+	return session.(Session).Data, nil
 }
 
 // UpdateSessionData overwrites the old session data with the new one
 func (m *SessionManager) UpdateSessionData(sessionID string, data map[string]interface{}) error {
-	_, ok := m.sessions[sessionID]
+	_, ok := m.sessions.Load(sessionID)
 	if !ok {
 		return ErrSessionNotFound
 	}
 
 	// Hint: you should renew expiry of the session here
-	m.sessions[sessionID] = Session{
+	m.sessions.Store(sessionID, Session{
 		Data:       data,
 		Expiration: time.Now().Add(5 * time.Second),
-	}
+	})
 
 	updt <- time.Now()
 
@@ -151,12 +146,10 @@ func (m *SessionManager) CleanOldTimer(updated <-chan time.Time) {
 
 // CleanOld checks the sessions and clean the older ones
 func (m *SessionManager) CleanOld() {
-	m.Lock()
-	defer m.Unlock()
-
-	for k, session := range m.sessions {
-		if time.Now().After(session.Expiration) {
-			delete(m.sessions, k)
+	m.sessions.Range(func(key, value interface{}) bool {
+		if exp := value.(Session).Expiration; time.Now().After(exp) {
+			m.sessions.Delete(key)
 		}
-	}
+		return true
+	})
 }
