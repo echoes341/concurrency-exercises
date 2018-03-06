@@ -20,17 +20,24 @@ package main
 import (
 	"errors"
 	"log"
+	"sync"
+	"time"
 )
+
+const cleanerStep = 6 * time.Second
 
 // SessionManager keeps track of all sessions from creation, updating
 // to destroying.
 type SessionManager struct {
+	sync.Mutex
+
 	sessions map[string]Session
 }
 
 // Session stores the session's data
 type Session struct {
-	Data map[string]interface{}
+	Data       map[string]interface{}
+	Expiration time.Time
 }
 
 // NewSessionManager creates a new sessionManager
@@ -79,11 +86,16 @@ func (m *SessionManager) UpdateSessionData(sessionID string, data map[string]int
 
 	// Hint: you should renew expiry of the session here
 	m.sessions[sessionID] = Session{
-		Data: data,
+		Data:       data,
+		Expiration: time.Now().Add(5 * time.Second),
 	}
+
+	updt <- time.Now()
 
 	return nil
 }
+
+var updt = make(chan time.Time)
 
 func main() {
 	// Create new sessionManager and new session
@@ -95,9 +107,13 @@ func main() {
 
 	log.Println("Created new session with ID", sID)
 
+	// Session Garbage collector
+	go m.CleanOldTimer(updt)
+
 	// Update session data
 	data := make(map[string]interface{})
 	data["website"] = "longhoang.de"
+	updt <- time.Now()
 
 	err = m.UpdateSessionData(sID, data)
 	if err != nil {
@@ -113,4 +129,34 @@ func main() {
 	}
 
 	log.Println("Get session data:", updatedData)
+}
+
+// CleanOldTimer cleans the older sessions
+func (m *SessionManager) CleanOldTimer(updated <-chan time.Time) {
+	<-updated
+	// from now it starts a countdown of 5 seconds?
+	timer := time.NewTimer(cleanerStep)
+	for {
+		select {
+		// new update has been made before timer end
+		case <-updated:
+			timer.Stop()
+		case <-timer.C:
+			m.CleanOld()
+		}
+
+		timer = time.NewTimer(cleanerStep)
+	}
+}
+
+// CleanOld checks the sessions and clean the older ones
+func (m *SessionManager) CleanOld() {
+	m.Lock()
+	defer m.Unlock()
+
+	for k, session := range m.sessions {
+		if time.Now().After(session.Expiration) {
+			delete(m.sessions, k)
+		}
+	}
 }
