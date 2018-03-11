@@ -36,13 +36,12 @@ func (t *Tourist) Run(wg *sync.WaitGroup) {
 
 	pcPool, wait := pool.Computer()
 	if wait { // computer is not ready
-		// wc is now a wait timer
 		fmt.Println("Tourist", t.n, "waiting for turn.")
 	}
-	// wait till he receive a channel to pc available
+	// wait till it receives a channel to pc available
 	pc := <-pcPool
 	fmt.Println("Tourist", t.n, "is online")
-	// now I can send
+	// now I can send task
 	t.wg.Add(1)
 	pc <- t
 	t.wg.Wait()
@@ -52,11 +51,10 @@ func (t *Tourist) Run(wg *sync.WaitGroup) {
 func (t *Tourist) Exec() {
 	wait := time.Duration(t.waitTime) * time.Second
 	time.Sleep(wait)
-	fmt.Println("Decidi tu se ne vale la pena", t.n)
 }
 
 // Finished is closing task after Exec
 func (t *Tourist) Finished() {
-	fmt.Println("Tourist", t.n, "is done, having spent", t.waitTime, " minutes online.")
+	fmt.Println("Tourist", t.n, "is done, having spent", t.waitTime, "minutes online.")
 	t.wg.Done()
 }
